@@ -158,7 +158,7 @@ A: 便携版为自包含单目录程序且未做代码签名，可能被部分�
 ## 许可证
 
 - 匣流 XiaFlow 源码：[MIT License](LICENSE)
-- 随附第三方组件：7-Zip（LGPL-2.1 + unRAR 限制）、SharpCompress（MIT）、K4os.LZ4（MIT）、.NET（MIT）
+- 随附第三方组件：7-Zip（LGPL-2.1 + unRAR 限制）、SharpCompress（MIT）、K4os.LZ4（MIT）、.NET（MIT）、Inno Setup 简体中文翻译（MIT）
   —— 完整文本见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 与随程序分发的 `licenses/` 目录
 
 匣流不复制任何参考产品（7-Zip / Bandizip / 360压缩 等）的品牌、图标或受版权保护的代码。

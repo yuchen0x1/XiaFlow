@@ -35,7 +35,7 @@ DisableProgramGroupPage=yes
 ChangesAssociations=no
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "Languages\ChineseSimplified.isl"
 
 [CustomMessages]
 chinesesimplified.CreateDesktopIcon=创建桌面快捷方式(&D)

@@ -32,7 +32,14 @@
 - 自包含分发运行时二进制
 - https://github.com/dotnet/runtime
 
-## 5. Windows API（操作系统自带）
+## 5. Inno Setup 简体中文翻译
+
+- 文件：`installer/Languages/ChineseSimplified.isl`
+- 翻译维护者：Zhenghan Yang；来源：[`kira-96/Inno-Setup-Chinese-Simplified-Translation`](https://github.com/kira-96/Inno-Setup-Chinese-Simplified-Translation)
+- 许可证：**MIT**（版权声明 kirakira，2019–2020）；许可全文：[`resources/licenses/Inno-Setup-Chinese-Simplified-MIT.txt`](resources/licenses/Inno-Setup-Chinese-Simplified-MIT.txt)，随程序分发于 `licenses/`
+- 构建所用版本：[Inno Setup 6.7.1 上游源码中的简体中文翻译文件](https://github.com/jrsoftware/issrc/blob/is-6_7_1/Files/Languages/Unofficial/ChineseSimplified.isl)
+
+## 6. Windows API（操作系统自带）
 
 - Shell_NotifyIcon、NtSuspendProcess/NtResumeProcess、schtasks.exe、DPAPI（CryptProtectData）
   均为 Windows 操作系统组件，随系统许可分发，匣流仅通过 P/Invoke 调用。
