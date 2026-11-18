@@ -1,0 +1,17 @@
+<UserControl x:Class="XiaFlow.App.Views.DropZone"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             AllowDrop="True" MinHeight="110">
+    <Border x:Name="bd" Background="{DynamicResource Brush.Bg1}" BorderBrush="{DynamicResource Brush.BorderStrong}"
+            BorderThickness="1.4" CornerRadius="12" Padding="18" Opacity="0.9">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Path Data="M12,16 L12,6 M7.5,10.5 L12,6 16.5,10.5 M4,20 L20,20" Stretch="Uniform" Width="30" Height="30"
+                  Stroke="{DynamicResource Brush.Accent}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                  StrokeLineJoin="Round" Fill="Transparent"/>
+            <TextBlock x:Name="HintText" Text="拖放文件或文件夹到此处" FontSize="13.5" HorizontalAlignment="Center"
+                       Margin="0,10,0,0" Foreground="{DynamicResource Brush.Text0}"/>
+            <TextBlock x:Name="SubText" Text="支持 ZIP / 7Z / RAR 等格式，或任意文件与文件夹" FontSize="11.5" HorizontalAlignment="Center"
+                       Margin="0,4,0,0" Foreground="{DynamicResource Brush.Text2}"/>
+        </StackPanel>
+    </Border>
+</UserControl>

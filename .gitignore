@@ -1,0 +1,17 @@
+bin/
+obj/
+artifacts/
+publish/
+*.user
+.vs/
+.vscode/
+docs/screenshots/*.png
+!docs/screenshots/.gitkeep
+resources/engine/x64/*.exe
+resources/engine/x64/*.dll
+packages/
+*.aps
+*.log
+TestResults/
+# 7-Zip 引擎二进制随仓库分发（LGPL + unRAR 限制，见 resources/licenses/），
+# 保证克隆后可直接运行测试与应用

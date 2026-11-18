@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/XiaFlow.App/XiaFlow.App.csproj" />
+    <Project Path="src/XiaFlow.Core/XiaFlow.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/XiaFlow.Tests/XiaFlow.Tests.csproj" />
+  </Folder>
+</Solution>

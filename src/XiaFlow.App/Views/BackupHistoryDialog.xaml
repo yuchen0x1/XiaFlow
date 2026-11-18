@@ -1,0 +1,37 @@
+<Window x:Class="XiaFlow.App.Views.BackupHistoryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="备份历史" Width="860" Height="560" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Bg0}">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="TitleText" Text="备份历史" Style="{StaticResource H2}" VerticalAlignment="Center"/>
+            <Button Content="打开备份目录" Margin="14,0,0,0" Click="OpenDir_Click"/>
+            <Button Content="导出记录（CSV）" Margin="8,0,0,0" Click="Export_Click"/>
+        </StackPanel>
+        <DataGrid x:Name="Grid" Grid.Row="1" Margin="0,10,0,0">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="时间" Binding="{Binding TimeText}" Width="140"/>
+                <DataGridTextColumn Header="类型" Binding="{Binding TypeText}" Width="60"/>
+                <DataGridTextColumn Header="文件" Binding="{Binding FileName}" Width="3*"/>
+                <DataGridTextColumn Header="源大小" Binding="{Binding SourceText}" Width="90"/>
+                <DataGridTextColumn Header="备份大小" Binding="{Binding ArchiveText}" Width="90"/>
+                <DataGridTextColumn Header="压缩率" Binding="{Binding RatioText}" Width="70"/>
+                <DataGridTextColumn Header="文件数" Binding="{Binding FileCount}" Width="60"/>
+                <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="70"/>
+                <DataGridTextColumn Header="校验" Binding="{Binding VerifiedText}" Width="50"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="恢复选中备份…" Style="{StaticResource PrimaryButton}" Padding="16,7" Click="Restore_Click"/>
+            <Button Content="手动校验" Margin="8,0,0,0" Click="Verify_Click"/>
+            <Button Content="删除选中备份" Margin="8,0,0,0" Click="Delete_Click"/>
+            <Button Content="关闭" Margin="8,0,0,0" Click="Close_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

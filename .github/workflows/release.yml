@@ -1,0 +1,93 @@
+name: Release
+
+# XiaFlow 发布流水线：
+# 推送 v* 标签时构建便携版与安装包，并创建 GitHub Release。
+# 更新包的 SHA-256 会写入 Release Notes（客户端更新前强制校验）。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: 运行全部自动化测试
+        run: dotnet test tests/XiaFlow.Tests/XiaFlow.Tests.csproj -c Release --nologo
+
+      - name: 构建便携版（自包含）
+        run: dotnet publish src/XiaFlow.App/XiaFlow.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/portable/XiaFlow
+
+      - name: 安装 Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: 构建安装包
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" }
+          & $iscc installer/XiaFlow.iss
+
+      - name: 打包便携版 ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "artifacts/portable/XiaFlow/*" -DestinationPath "artifacts/XiaFlow-portable-x64.zip"
+          # 重命名带版本号
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = (Select-String -Path src/XiaFlow.Core/XiaFlow.Core.csproj -Pattern "not-needed").Matches.Count } # fallback
+          Rename-Item "artifacts/XiaFlow-portable-x64.zip" "XiaFlow-$tag-portable-x64.zip"
+
+      - name: 计算 SHA-256
+        id: sha
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$') { throw "发布必须从 vMAJOR.MINOR.PATCH 标签触发，当前标签：$tag" }
+          $version = $Matches.version
+          $notes = Get-Content docs/releases/release-notes.md -Raw
+          $pattern = "(?ms)^## \[$([regex]::Escape($version))\].*?(?=^## \[|\z)"
+          $releaseNotes = [regex]::Match($notes, $pattern)
+          if (-not $releaseNotes.Success) { throw "更新说明中没有版本 $version" }
+
+          $files = @()
+          $files += Get-ChildItem artifacts/installer -File -Filter "*.exe"
+          $files += Get-ChildItem artifacts -File -Filter "*-portable-x64.zip"
+          if ($files.Count -ne 2) { throw "预期安装包和便携版 ZIP 各一个，实际找到 $($files.Count) 个发布资产" }
+          $lines = $files | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "sha256:$hash  ->  $($_.Name)"
+          }
+          $lines | Out-File artifacts/sha256.txt
+          Get-Content artifacts/sha256.txt
+
+          @(
+            $releaseNotes.Value.Trim()
+            ""
+            "### SHA-256"
+            ""
+            (Get-Content artifacts/sha256.txt -Raw).Trim()
+          ) -join "`n" | Out-File artifacts/release-body.md -Encoding utf8NoBOM
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "匣流 XiaFlow ${{ github.ref_name }}"
+          body_path: artifacts/release-body.md
+          files: |
+            artifacts/installer/*.exe
+            artifacts/*.zip
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') }}

@@ -1,0 +1,189 @@
+<UserControl x:Class="XiaFlow.App.Pages.QuickCompressPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:XiaFlow.App.Views">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="28,18,28,20" MaxWidth="1120">
+            <Grid Margin="0,0,0,14">
+                <StackPanel>
+                    <TextBlock Text="快速压缩" Style="{StaticResource H1}"/>
+                    <TextBlock Text="将文件与文件夹压缩为 ZIP / 7Z 等格式，支持密码加密、分卷与高级参数" Style="{StaticResource Sub}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Grid>
+
+            <views:DropZone x:Name="CompressZone" Hint="拖放要压缩的文件 / 文件夹" SubHint="支持混合多选，自动保留目录结构"
+                            MinHeight="120" FilesDropped="Zone_FilesDropped"/>
+
+            <!-- 文件清单 -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <TextBlock Text="待压缩内容" Style="{StaticResource H2}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="添加文件" Style="{StaticResource GhostButton}" Click="AddFiles_Click"/>
+                            <Button Content="添加文件夹" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="AddFolder_Click"/>
+                            <Button Content="清空" Style="{StaticResource GhostButton}" Margin="6,0,0,0" Click="ClearList_Click"/>
+                        </StackPanel>
+                    </Grid>
+                    <ListBox x:Name="InputList" MaxHeight="170" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📁" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding}" FontSize="12.5"/>
+                                    </StackPanel>
+                                    <Button Content="✕" Style="{StaticResource IconButton}" HorizontalAlignment="Right"
+                                            Tag="{Binding}" Click="RemoveInput_Click"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+
+            <!-- 输出设置 -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                <StackPanel>
+                    <TextBlock Text="输出设置" Style="{StaticResource H2}" Margin="0,0,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="压缩包名称" Style="{StaticResource Field}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBox x:Name="OutName" Grid.Column="1" Text="Archive"/>
+                        <TextBlock x:Name="OutExt" Text=".7z" Style="{StaticResource Field}" Grid.Column="2" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </Grid>
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="保存目录" Style="{StaticResource Field}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBox x:Name="OutDir" Grid.Column="1"/>
+                        <Button Content="浏览…" Grid.Column="2" Margin="8,0,0,0" Click="PickOutDir_Click"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- 压缩参数 -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="压缩参数" Style="{StaticResource H2}"/>
+                        <CheckBox x:Name="ProMode" Content="专业模式" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  Checked="ProMode_Changed" Unchecked="ProMode_Changed"/>
+                    </Grid>
+
+                    <UniformGrid Columns="2" Rows="1">
+                        <StackPanel Margin="0,0,14,0">
+                            <TextBlock Text="压缩格式" Style="{StaticResource Field}"/>
+                            <ComboBox x:Name="FormatBox" SelectionChanged="Format_Changed">
+                                <ComboBoxItem Content="7Z（推荐，高压缩比）" Tag="7z"/>
+                                <ComboBoxItem Content="ZIP（通用兼容）" Tag="zip" IsSelected="False"/>
+                                <ComboBoxItem Content="TAR" Tag="tar"/>
+                                <ComboBoxItem Content="GZIP" Tag="gz"/>
+                                <ComboBoxItem Content="BZIP2" Tag="bz2"/>
+                                <ComboBoxItem Content="XZ" Tag="xz"/>
+                                <ComboBoxItem Content="WIM" Tag="wim"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="压缩等级" Style="{StaticResource Field}"/>
+                            <ComboBox x:Name="LevelBox">
+                                <ComboBoxItem Content="存储模式（不压缩）" Tag="0"/>
+                                <ComboBoxItem Content="极速压缩" Tag="1"/>
+                                <ComboBoxItem Content="快速压缩" Tag="3"/>
+                                <ComboBoxItem Content="标准压缩" Tag="5" IsSelected="True"/>
+                                <ComboBoxItem Content="高压缩" Tag="7"/>
+                                <ComboBoxItem Content="极限压缩" Tag="9"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <!-- 高级参数（专业模式） -->
+                    <StackPanel x:Name="ProPanel" Visibility="Collapsed">
+                        <UniformGrid Columns="2" Margin="0,6,14,0">
+                            <StackPanel Margin="0,0,14,0">
+                                <TextBlock Text="压缩线程数" Style="{StaticResource Field}"/>
+                                <ComboBox x:Name="ThreadsBox"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="字典大小（7Z）" Style="{StaticResource Field}"/>
+                                <ComboBox x:Name="DictBox">
+                                    <ComboBoxItem Content="默认" Tag="0" IsSelected="True"/>
+                                    <ComboBoxItem Content="16 MB" Tag="16777216"/>
+                                    <ComboBoxItem Content="32 MB" Tag="33554432"/>
+                                    <ComboBoxItem Content="64 MB" Tag="67108864"/>
+                                    <ComboBoxItem Content="128 MB" Tag="134217728"/>
+                                    <ComboBoxItem Content="256 MB" Tag="268435456"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </UniformGrid>
+                        <UniformGrid Columns="2" Margin="0,6,14,0">
+                            <StackPanel Margin="0,0,14,0">
+                                <TextBlock Text="分卷大小（0 = 不分卷）" Style="{StaticResource Field}"/>
+                                <ComboBox x:Name="VolumeBox">
+                                    <ComboBoxItem Content="不分卷" Tag="0" IsSelected="True"/>
+                                    <ComboBoxItem Content="10 MB" Tag="10"/>
+                                    <ComboBoxItem Content="50 MB" Tag="50"/>
+                                    <ComboBoxItem Content="100 MB" Tag="100"/>
+                                    <ComboBoxItem Content="700 MB（CD）" Tag="700"/>
+                                    <ComboBoxItem Content="1024 MB" Tag="1024"/>
+                                    <ComboBoxItem Content="4 GB（FAT32 安全）" Tag="4096"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="排除规则（多个用分号分隔）" Style="{StaticResource Field}"/>
+                                <TextBox x:Name="ExcludeBox" Text="Thumbs.db;desktop.ini;*.tmp"/>
+                            </StackPanel>
+                        </UniformGrid>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <CheckBox x:Name="SolidBox" Content="固实压缩（7Z，更高压缩比）" IsChecked="True" Margin="0,0,22,0"/>
+                            <CheckBox x:Name="TestBox" Content="压缩后完整性测试" IsChecked="False" Margin="0,0,22,0"/>
+                            <CheckBox x:Name="KeepTimeBox" Content="保留文件时间与属性" IsChecked="True" IsEnabled="False" ToolTip="引擎默认保留时间与属性"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- 密码 -->
+                    <Border Background="{DynamicResource Brush.Bg1}" CornerRadius="9" Padding="12,10" Margin="0,12,0,0">
+                        <StackPanel>
+                            <Grid>
+                                <CheckBox x:Name="UsePwd" Content="密码保护（AES-256 加密）" Checked="UsePwd_Changed" Unchecked="UsePwd_Changed"/>
+                                <CheckBox x:Name="EncryptNames" Content="加密文件名（仅 7Z）" IsChecked="False" IsEnabled="False"
+                                          HorizontalAlignment="Right" Checked="UsePwd_Changed" Unchecked="UsePwd_Changed"/>
+                            </Grid>
+                            <StackPanel x:Name="PwdPanel" Visibility="Collapsed">
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <PasswordBox x:Name="Pwd1" PasswordChanged="Pwd_Changed"/>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0">
+                                        <Button Content="保存到密码库" Style="{StaticResource GhostButton}" Click="SavePwd_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <PasswordBox x:Name="Pwd2" PasswordChanged="Pwd_Changed"/>
+                                    <TextBlock x:Name="StrengthText" Text="" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" FontSize="12"/>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0" HorizontalAlignment="Right">
+                <Button x:Name="BtnStart" Content="开始压缩" Style="{StaticResource PrimaryButton}" Padding="26,9" FontSize="14" Click="Start_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

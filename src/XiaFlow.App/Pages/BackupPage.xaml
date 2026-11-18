@@ -1,0 +1,79 @@
+<UserControl x:Class="XiaFlow.App.Pages.BackupPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="28,18,28,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="自动备份中心" Style="{StaticResource H1}"/>
+            <TextBlock Text="为不同项目设置独立的备份策略：周期计划、加密、增量/差异、保留策略与完整备份链" Style="{StaticResource Sub}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <Button Content="＋ 新建备份任务" Style="{StaticResource PrimaryButton}" Padding="18,8" Click="NewTask_Click"/>
+                    <Button Content="立即运行全部" Margin="10,0,0,0" Click="RunAll_Click"/>
+                    <TextBlock x:Name="SchedHint" Text="" Style="{StaticResource Sub}" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                </StackPanel>
+
+                <ItemsControl x:Name="TaskCards">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" FontSize="15.5" FontWeight="SemiBold" Foreground="{DynamicResource Brush.Text0}"/>
+                                            <Border Style="{StaticResource BadgeBorder}" Margin="10,0,0,0">
+                                                <TextBlock Text="{Binding StrategyText}" FontSize="11" Foreground="{DynamicResource Brush.Text1}"/>
+                                            </Border>
+                                            <Border Style="{StaticResource BadgeBorder}" Margin="6,0,0,0">
+                                                <TextBlock Text="{Binding ScheduleText}" FontSize="11" Foreground="{DynamicResource Brush.Text1}"/>
+                                            </Border>
+                                            <Border x:Name="DisabledBadge" Background="#33E5566D" CornerRadius="999" Padding="9,3" Margin="6,0,0,0"
+                                                    Visibility="{Binding DisabledVisibility}">
+                                                <TextBlock Text="已停用" FontSize="11" Foreground="{DynamicResource Brush.Danger}"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding SourcesText}" Style="{StaticResource Sub}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Style="{StaticResource Sub}" Margin="0,3,0,0">
+                                            <Run Text="目标: "/><Run Text="{Binding DestDir, Mode=OneWay}"/>
+                                            <Run Text="  ·  上次: "/><Run Text="{Binding LastRunText, Mode=OneWay}"/>
+                                            <Run Text="  ·  下次: "/><Run Text="{Binding NextRunText, Mode=OneWay}"/>
+                                            <Run Text="  ·  保留: "/><Run Text="{Binding KeepText, Mode=OneWay}"/>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding LastError}" Foreground="{DynamicResource Brush.Danger}" FontSize="11.5" Margin="0,3,0,0"
+                                                   Visibility="{Binding ErrorVisibility}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Content="▶ 立即备份" Style="{StaticResource PrimaryButton}" Tag="{Binding}" Click="RunNow_Click"/>
+                                        <Button Content="历史" Margin="8,0,0,0" Tag="{Binding}" Click="History_Click"/>
+                                        <Button Content="编辑" Margin="6,0,0,0" Tag="{Binding}" Click="Edit_Click"/>
+                                        <Button Content="打开目录" Margin="6,0,0,0" Tag="{Binding}" Click="OpenDir_Click"/>
+                                        <Button Content="{Binding ToggleText}" Margin="6,0,0,0" Tag="{Binding}" Click="Toggle_Click"/>
+                                        <Button Content="删除" Margin="6,0,0,0" Tag="{Binding}" Click="Delete_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border x:Name="EmptyHint" Style="{StaticResource Card}" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="还没有备份任务" Style="{StaticResource H2}"/>
+                        <TextBlock Text="点击「新建备份任务」，选择要备份的文件夹、备份周期与保留策略，匣流会按规则自动压缩、校验并管理历史备份。" Style="{StaticResource Sub}" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
