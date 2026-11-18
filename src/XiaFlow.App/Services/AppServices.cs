@@ -69,6 +69,7 @@ namespace XiaFlow.App.Services
         public static void ApplyGeneralSettings()
         {
             Tasks.MaxParallel = Math.Max(1, Settings.MaxParallelTasks);
+            Updater.Repository = Settings.UpdateSource;
             Themes.ThemeManager.Apply(Settings.Theme);
             try { XiaFlow.Core.Integration.AutoStart.Set(Settings.StartWithWindows); }
             catch (Exception ex) { Core.Logging.Logger.Warn("开机启动设置失败: " + ex.Message); }

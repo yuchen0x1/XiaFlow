@@ -1,0 +1,32 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    name: Windows validation
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+      - run: ./scripts/validate.ps1
+      - run: ./scripts/smoke-cli.ps1
+      - name: Install Inno Setup
+        run: choco install innosetup --version=6.7.1 -y --no-progress
+      - run: ./scripts/package.ps1 -Installer
+      - name: Verify upgrade, restart, uninstall and data retention
+        run: |
+          $version = ([xml](Get-Content Directory.Build.props -Raw)).SelectSingleNode('/Project/PropertyGroup/Version').InnerText
+          ./scripts/smoke-install.ps1 -Version $version

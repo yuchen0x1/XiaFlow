@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -12,39 +11,38 @@ namespace XiaFlow.App.Pages
     public partial class AboutPage : UserControl
     {
         UpdateInfo? _pendingUpdate;
-        string? _downloadedFile;
+        CancellationTokenSource? _downloadCancellation;
 
         public AboutPage()
         {
             InitializeComponent();
             ChannelText.Text = AppServices.Settings.UpdateChannel == "beta" ? "测试版" : "稳定版";
+            UpdateStatus.Text = UpdateService.IsInstalled
+                ? "安装官方签名更新前，请先等待所有任务完成。"
+                : "便携版请从发布页下载并解压新版 ZIP。";
         }
 
         async void Check_Click(object sender, RoutedEventArgs e)
         {
             BtnCheck.IsEnabled = false;
+            SetPending(null);
             UpdateStatus.Text = "正在连接更新源…";
             try
             {
                 var info = await AppServices.Updater.CheckAsync(AppServices.Settings.UpdateChannel);
                 if (info == null)
-                {
                     UpdateStatus.Text = "更新源上没有可用版本。";
-                    return;
-                }
-                if (!UpdateService.IsNewer(info.Version, Branding.AppVersion.ToString(3)))
-                {
+                else if (!UpdateService.IsNewer(info.Version, Branding.AppVersion.ToString(3)))
                     UpdateStatus.Text = $"当前已是最新版本（远端 {info.Version}）";
-                    return;
+                else
+                {
+                    SetPending(info);
+                    var instructions = BtnDownload.Visibility == Visibility.Visible
+                        ? "安装前将校验发布签名、包大小及 SHA-256。"
+                        : "请在发布页选择对应安装包或便携版。";
+                    UpdateStatus.Text = $"发现新版本 {info.Version}（{info.PublishedAt:yyyy-MM-dd}）\n" +
+                        $"安装包大小：{(info.DownloadSize > 0 ? Ui.Fmt(info.DownloadSize) : "未知")}\n{instructions}";
                 }
-                _pendingUpdate = info;
-                NotesCard.Visibility = Visibility.Visible;
-                NotesBox.Text = info.Notes ?? "";
-                UpdateStatus.Text = $"发现新版本 {info.Version}（发布于 {info.PublishedAt:yyyy-MM-dd}）\n" +
-                    $"下载大小：约 {Ui.Fmt(info.DownloadSize)}\n" +
-                    (info.Sha256 != null ? "已提供 SHA-256 摘要，安装前将自动校验。" : "⚠ 该版本未提供 SHA-256 摘要，将下载但不会自动执行安装。");
-                BtnDownload.Visibility = Visibility.Visible;
-                BtnSkip.Visibility = Visibility.Visible;
             }
             catch (Exception ex)
             {
@@ -56,54 +54,68 @@ namespace XiaFlow.App.Pages
             }
         }
 
+        void SetPending(UpdateInfo? info)
+        {
+            _pendingUpdate = info;
+            NotesCard.Visibility = BtnSkip.Visibility = BtnDetails.Visibility = BtnLater.Visibility =
+                info == null ? Visibility.Collapsed : Visibility.Visible;
+            NotesBox.Text = info?.Notes ?? "";
+            BtnDownload.Visibility = info?.CanInstall == true && UpdateService.IsInstalled && UpdateService.IsSupportedPlatform
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         async void Download_Click(object sender, RoutedEventArgs e)
         {
-            if (_pendingUpdate?.DownloadUrl == null)
+            if (_pendingUpdate is not { } info || _downloadCancellation != null) return;
+            if (AppServices.Tasks.ActiveCount != 0)
             {
-                Ui.WarnBox("匣流", "该版本没有可用的下载资产");
+                UpdateStatus.Text = "请先等待所有任务完成。";
                 return;
             }
-            BtnDownload.IsEnabled = false;
-            UpdateProgress.Visibility = Visibility.Visible;
+
+            using var cancellation = new CancellationTokenSource();
+            _downloadCancellation = cancellation;
+            BtnCheck.IsEnabled = BtnDownload.IsEnabled = BtnSkip.IsEnabled = BtnLater.IsEnabled = false;
+            BtnCancel.Visibility = UpdateProgress.Visibility = Visibility.Visible;
             UpdateProgress.Value = 0;
+            UpdateStatus.Text = "正在验证发布签名…";
+            var elapsed = Stopwatch.StartNew();
             try
             {
-                var progress = new Progress<double>(v => UpdateProgress.Value = v);
-                _downloadedFile = await AppServices.Updater.DownloadAsync(_pendingUpdate, progress);
-                UpdateStatus.Text = "下载完成，正在校验 SHA-256…";
-
-                if (_pendingUpdate.Sha256 != null)
+                var progress = new Progress<(long Downloaded, long Total)>(value =>
                 {
-                    bool ok = UpdateService.VerifyFile(_downloadedFile, _pendingUpdate.Sha256);
-                    if (!ok)
-                    {
-                        File.Delete(_downloadedFile);
-                        _downloadedFile = null;
-                        UpdateStatus.Text = "SHA-256 校验失败！已删除未经验证的文件。请从官方发布页手动下载。";
-                        return;
-                    }
-                    UpdateStatus.Text = "校验通过，准备安装…";
-                }
-                else
-                {
-                    UpdateStatus.Text = "该版本未提供 SHA-256 摘要，出于安全考虑不会自动执行。请手动运行：" + _downloadedFile;
-                    Ui.OpenInExplorer(Path.GetDirectoryName(_downloadedFile)!);
-                    return;
-                }
-
-                AppServices.Updater.Install(_downloadedFile, silent: true);
-                UpdateStatus.Text = "安装程序已启动，匣流将退出并完成更新。";
-                await Task.Delay(1500);
+                    if (_downloadCancellation != cancellation) return;
+                    UpdateProgress.Value = value.Downloaded * 100.0 / value.Total;
+                    var speed = (long)(value.Downloaded / Math.Max(1, elapsed.Elapsed.TotalSeconds));
+                    UpdateStatus.Text = $"下载 {Ui.Fmt(value.Downloaded)} / {Ui.Fmt(value.Total)} · {Ui.Fmt(speed)}/秒";
+                });
+                await AppServices.Updater.InstallAsync(info, progress, cancellation.Token, () => AppServices.Tasks.ActiveCount == 0);
                 ((App)Application.Current).ExitApplication();
+            }
+            catch (OperationCanceledException)
+            {
+                UpdateStatus.Text = cancellation.IsCancellationRequested ? "已取消更新。" : "下载超时，请重试。";
             }
             catch (Exception ex)
             {
-                UpdateStatus.Text = "下载失败：" + ex.Message;
+                UpdateStatus.Text = "更新失败：" + ex.Message;
             }
             finally
             {
-                BtnDownload.IsEnabled = true;
+                _downloadCancellation = null;
+                BtnCheck.IsEnabled = BtnDownload.IsEnabled = BtnSkip.IsEnabled = BtnLater.IsEnabled = true;
+                BtnCancel.Visibility = UpdateProgress.Visibility = Visibility.Collapsed;
             }
+        }
+
+        void Cancel_Click(object sender, RoutedEventArgs e) => _downloadCancellation?.Cancel();
+
+        void Later_Click(object sender, RoutedEventArgs e)
+        {
+            SetPending(null);
+            UpdateStatus.Text = "可以在此随时重新检查更新。";
+            if (Window.GetWindow(this) is MainWindow main)
+                main.DismissUpdate();
         }
 
         void Skip_Click(object sender, RoutedEventArgs e)
@@ -112,14 +124,23 @@ namespace XiaFlow.App.Pages
             AppServices.Settings.SkippedVersion = _pendingUpdate.Version;
             AppServices.Settings.Save();
             UpdateStatus.Text = $"已跳过版本 {_pendingUpdate.Version}。";
-            BtnDownload.Visibility = Visibility.Collapsed;
-            BtnSkip.Visibility = Visibility.Collapsed;
+            SetPending(null);
+            if (Window.GetWindow(this) is MainWindow main)
+                main.DismissUpdate();
         }
 
-        void OpenHome_Click(object sender, RoutedEventArgs e)
+        void Details_Click(object sender, RoutedEventArgs e)
         {
-            try { Process.Start(new ProcessStartInfo(Branding.HomepageUrl) { UseShellExecute = true }); } catch { }
+            if (_pendingUpdate != null) OpenUrl(_pendingUpdate.ReleaseUrl);
         }
+
+        static void OpenUrl(string url)
+        {
+            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            catch (Exception ex) { Ui.WarnBox("匣流", "无法打开发行页：" + ex.Message); }
+        }
+
+        void OpenHome_Click(object sender, RoutedEventArgs e) => OpenUrl(Branding.HomepageUrl);
 
         void OpenLicense_Click(object sender, RoutedEventArgs e)
         {

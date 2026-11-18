@@ -391,7 +391,7 @@ namespace XiaFlow.App.Pages
                     ArchivePath = VolumeHelper.GetFirstVolume(_archivePath),
                     OutputDir = tmpDir,
                     Password = string.IsNullOrEmpty(_password) ? null : _password,
-                    SelectedEntries = { r.FullEntryPath },
+                    SelectedEntries = new() { r.FullEntryPath },
                 });
                 var file = Path.Combine(tmpDir, r.FullEntryPath.Replace('/', Path.DirectorySeparatorChar));
                 if (!File.Exists(file))
@@ -453,7 +453,7 @@ namespace XiaFlow.App.Pages
                     ArchivePath = VolumeHelper.GetFirstVolume(_archivePath),
                     OutputDir = tmpDir,
                     Password = string.IsNullOrEmpty(_password) ? null : _password,
-                    SelectedEntries = { entries[0] },
+                    SelectedEntries = new() { entries[0] },
                 });
                 var file = Path.Combine(tmpDir, entries[0].Replace('/', Path.DirectorySeparatorChar));
                 if (!File.Exists(file))

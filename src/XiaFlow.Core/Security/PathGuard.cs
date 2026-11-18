@@ -43,7 +43,7 @@ namespace XiaFlow.Core.Security
 
             // 拒绝绝对路径（盘符 / UNC / Win32 命名空间）
             if (name.Contains(':') && (name.Length > 1 && name[1] == ':')) return null;
-            if (name.StartsWith("//") || name.StartsWith("/")) name = name.TrimStart('/');
+            if (name.StartsWith('/')) return null;
             if (entryName.Contains(':')) return null; // 任何冒号都视为不安全（NTFS 流 / 盘符）
 
             var sb = new StringBuilder();
@@ -142,7 +142,7 @@ namespace XiaFlow.Core.Security
         {
             var fullRoot = Path.GetFullPath(rootDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             var full = Path.GetFullPath(fullPath);
-            return full.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+            return full.StartsWith(fullRoot, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
         }
 
         public static string FormatBytes(long bytes)

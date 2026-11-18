@@ -10,7 +10,7 @@
                         <TextBlock Text="匣" FontSize="30" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="匣流 XiaFlow" FontSize="22" FontWeight="Bold"/>
+                        <TextBlock Text="匣流 XiaFlow" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource Brush.Text0}"/>
                         <TextBlock Text="匣流专业文件压缩与归档管理器" Style="{StaticResource Sub}" Margin="0,4,0,0"/>
                         <TextBlock Style="{StaticResource Sub}" Margin="0,3,0,0">
                             <Run Text="版本 "/><Run Text="{x:Static sysver:VersionTextLocator.Version}"/>
@@ -24,12 +24,15 @@
             <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                 <StackPanel>
                     <TextBlock Text="自动更新" Style="{StaticResource H2}" Margin="0,0,0,8"/>
-                    <StackPanel Orientation="Horizontal">
+                    <WrapPanel>
                         <Button x:Name="BtnCheck" Content="检查更新" Style="{StaticResource PrimaryButton}" Padding="18,8" Click="Check_Click"/>
                         <Button x:Name="BtnDownload" Content="下载并安装更新" Style="{StaticResource PrimaryButton}" Padding="18,8"
                                 Margin="10,0,0,0" Visibility="Collapsed" Click="Download_Click"/>
                         <Button x:Name="BtnSkip" Content="跳过此版本" Margin="8,0,0,0" Visibility="Collapsed" Click="Skip_Click"/>
-                    </StackPanel>
+                        <Button x:Name="BtnDetails" Content="查看详情" Margin="8,0,0,0" Visibility="Collapsed" Click="Details_Click"/>
+                        <Button x:Name="BtnLater" Content="稍后" Margin="8,0,0,0" Visibility="Collapsed" Click="Later_Click"/>
+                        <Button x:Name="BtnCancel" Content="取消下载" Margin="8,0,0,0" Visibility="Collapsed" Click="Cancel_Click"/>
+                    </WrapPanel>
                     <ProgressBar x:Name="UpdateProgress" Height="6" Margin="0,12,0,0" Visibility="Collapsed"/>
                     <TextBlock x:Name="UpdateStatus" Text="" Style="{StaticResource Sub}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
@@ -65,9 +68,7 @@
                     <TextBlock Text="第三方组件与许可" Style="{StaticResource H2}" Margin="0,0,0,8"/>
                     <TextBlock Style="{StaticResource Sub}" TextWrapping="Wrap">
                         · 7-Zip (7z.exe / 7z.dll)：LGPL-2.1 与 unRAR 限制（RAR 压缩创建因授权限制未提供，仅支持解压）<LineBreak/>
-                        · SharpCompress：MIT<LineBreak/>
                         · K4os.Compression.LZ4：MIT<LineBreak/>
-                        · H.NotifyIcon：MIT<LineBreak/>
                         · .NET (WPF)：MIT
                     </TextBlock>
                     <TextBlock Style="{StaticResource Sub}" Margin="0,6,0,0" TextWrapping="Wrap"

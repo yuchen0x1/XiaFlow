@@ -1,0 +1,46 @@
+name: Maintenance
+on:
+  schedule:
+    - cron: '37 3 * * 1'
+    - cron: '43 3 1 * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - shell: pwsh
+        run: ./scripts/check-release.ps1
+  competitors:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '43 3 1 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Capture upstream release and activity changes
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $repos = Select-String -Path docs/research.md -Pattern '^\| \[([\w.-]+/[\w.-]+)\]\(https://github\.com/' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
+          if ($repos.Count -lt 30) { throw 'Expected at least 30 recorded repositories.' }
+          $repos | ForEach-Object {
+            gh repo view $_ --json nameWithOwner,pushedAt,latestRelease,stargazerCount,forkCount,licenseInfo,isArchived
+          } | Set-Content competitor-snapshot.ndjson
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: competitor-snapshot
+          path: competitor-snapshot.ndjson
+          retention-days: 90
+          if-no-files-found: error

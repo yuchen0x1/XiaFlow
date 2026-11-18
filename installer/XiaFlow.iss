@@ -3,7 +3,9 @@
 
 #define MyAppName "XiaFlow"
 #define MyAppNameZh "匣流"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #error "Build with scripts/package.ps1 to supply MyAppVersion."
+#endif
 #define MyAppPublisher "XiaFlow"
 #define MyAppExeName "XiaFlow.exe"
 #define MyAppId "{{8E4F5A1C-6B2D-4E9A-9C71-8A7F10F10000}}"
@@ -21,7 +23,7 @@ DefaultGroupName={#MyAppName} ({#MyAppNameZh})
 UninstallDisplayName={#MyAppName} ({#MyAppNameZh})
 UninstallDisplayIcon={app}\{#MyAppExeName}
 OutputDir=..\artifacts\installer
-OutputBaseFilename=XiaFlow-1.0.0-setup-x64
+OutputBaseFilename=XiaFlow-{#MyAppVersion}-setup-x64
 SetupIconFile=..\src\XiaFlow.App\Assets\XiaFlow.ico
 Compression=lzma2/max
 SolidCompression=yes
@@ -30,9 +32,12 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
-MinVersion=10.0
+MinVersion=10.0.17763
 DisableProgramGroupPage=yes
 ChangesAssociations=no
+
+[INI]
+Filename: "{app}\xiaflow-installed.ini"; Section: "XiaFlow"; Key: "Version"; String: "{#MyAppVersion}"
 
 [Languages]
 Name: "chinesesimplified"; MessagesFile: "Languages\ChineseSimplified.isl"
@@ -58,7 +63,8 @@ Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName} ({#MyAppNameZh})"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName} ({#MyAppNameZh})}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: AppUpdate
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName} ({#MyAppNameZh})}"; Flags: nowait postinstall skipifsilent; Check: not AppUpdate
 
 [Registry]
 ; 右键压缩菜单（用户级 HKCU，无需管理员）
@@ -119,8 +125,20 @@ Root: HKCU; Subkey: "Software\Classes\.7z\OpenWithProgids"; ValueType: string; V
 Root: HKCU; Subkey: "Software\Classes\.zip\OpenWithProgids"; ValueType: string; ValueName: "XiaFlow.Archive"; ValueData: ""; Tasks: associate
 
 [UninstallDelete]
+Type: files; Name: "{app}\xiaflow-installed.ini"
 ; 卸载不删除用户数据（%APPDATA%\XiaFlow 备份 / 设置 / 密码库保留）
 
 [UninstallRun]
 ; 卸载时不额外执行命令：注册表项经 uninsdeletekey 自动清理；
 ; 备份计划任务由应用在删除任务时自行删除；用户数据（%APPDATA%\XiaFlow）完整保留。
+
+[Code]
+function AppUpdate: Boolean;
+var
+  Index: Integer;
+begin
+  Result := False;
+  for Index := 1 to ParamCount do
+    if CompareText(ParamStr(Index), '/XIAFLOWUPDATE') = 0 then
+      Result := True;
+end;

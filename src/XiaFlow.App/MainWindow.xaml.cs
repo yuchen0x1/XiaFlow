@@ -118,6 +118,8 @@ namespace XiaFlow.App
             });
         }
 
+        public void DismissUpdate() => UpdateBanner.Visibility = Visibility.Collapsed;
+
         // ---------- 标题栏 ----------
 
         void BtnMin_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

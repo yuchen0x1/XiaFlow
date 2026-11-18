@@ -1,201 +1,249 @@
-using System;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using XiaFlow.Core.Logging;
+using System.Text.RegularExpressions;
 
-namespace XiaFlow.Core.Update
+namespace XiaFlow.Core.Update;
+
+public sealed record UpdateInfo(string Version, string ReleaseUrl, string Notes, DateTime PublishedAt,
+    long DownloadSize, bool CanInstall);
+
+public sealed partial class UpdateService
 {
-    /// <summary>更新信息。</summary>
-    public sealed class UpdateInfo
+    internal const string MetadataAsset = "update-windows-x64.json";
+    internal const string SignatureAsset = "update-windows-x64.sig";
+    const string OfficialRepo = "yuchen0x1/XiaFlow";
+    const long MaxInstallerBytes = 512 * 1024 * 1024;
+
+    static readonly HttpClient SharedHttp = CreateHttp();
+    static readonly Lazy<byte[]> PinnedKey = new(() =>
     {
-        public string Version { get; set; } = "";
-        public string ReleaseUrl { get; set; } = "";
-        public string Notes { get; set; } = "";
-        public DateTime PublishedAt { get; set; }
-        public bool Prerelease { get; set; }
-        public string? DownloadUrl { get; set; }
-        public long DownloadSize { get; set; }
-        public string? Sha256 { get; set; }
+        using var stream = typeof(UpdateService).Assembly.GetManifestResourceStream("XiaFlow.UpdatePublicKey")
+            ?? throw new InvalidOperationException("缺少更新签名公钥。");
+        using var reader = new StreamReader(stream);
+        return Convert.FromBase64String(reader.ReadToEnd().Trim());
+    });
+
+    readonly HttpClient _http;
+    readonly Lazy<byte[]> _publicKey;
+
+    public UpdateService() : this(SharedHttp, PinnedKey) { }
+
+    internal UpdateService(HttpClient http, Lazy<byte[]> publicKey)
+    {
+        _http = http;
+        _publicKey = publicKey;
     }
 
-    /// <summary>
-    /// 自动更新：GitHub Releases 作为更新源。
-    /// - 下载资产必须携带 SHA-256 摘要（Release Body 中 `sha256:<hex>` 行）才允许自动安装；
-    /// - 校验失败绝不执行更新程序（安全要求）；
-    /// - 断点续传：服务端支持 Range 时自动续传。
-    /// </summary>
-    public sealed class UpdateService
+    public string Repository { get; set; } = Branding.RepositoryUrl;
+
+    static HttpClient CreateHttp()
     {
-        static readonly HttpClient Http = CreateHttp();
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30), MaxResponseContentBufferSize = 8 * 1024 * 1024 };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("XiaFlow-Updater/2.0");
+        return http;
+    }
 
-        static HttpClient CreateHttp()
+    public async Task<UpdateInfo?> CheckAsync(string channel = "stable", CancellationToken ct = default)
+    {
+        var repo = Repository.Trim().TrimEnd('/');
+        if (repo.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+            repo = repo["https://github.com/".Length..];
+        if (!Regex.IsMatch(repo, @"\A[A-Za-z0-9-]+/[A-Za-z0-9_.-]+\z") || repo.EndsWith("/.") || repo.EndsWith("/.."))
+            throw new InvalidOperationException("请输入有效的 GitHub 仓库地址。");
+
+        var beta = channel == "beta";
+        var url = $"https://api.github.com/repos/{repo}/releases" + (beta ? "?per_page=30" : "/latest");
+        using var response = await _http.GetAsync(url, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsByteArrayAsync(ct));
+        var releases = beta ? json.RootElement.EnumerateArray().ToArray() : new[] { json.RootElement };
+        var ranked = releases.Where(r => !r.GetProperty("draft").GetBoolean())
+            .Select(r => (Release: r, Tag: r.GetProperty("tag_name").GetString() ?? ""))
+            .Where(r => ParseTag(r.Tag) != null)
+            .OrderByDescending(r => r.Tag, Comparer<string>.Create(CompareTags));
+        foreach (var (release, tag) in ranked)
         {
-            var h = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            h.DefaultRequestHeaders.UserAgent.ParseAdd("XiaFlow-Updater/1.0");
-            return h;
+            var prerelease = release.GetProperty("prerelease").GetBoolean() || tag.Contains('-');
+            if (!beta && prerelease) continue;
+            var assets = release.GetProperty("assets").EnumerateArray()
+                .Where(a => a.GetProperty("state").GetString() == "uploaded")
+                .ToDictionary(a => a.GetProperty("name").GetString()!, a => a.GetProperty("size").GetInt64());
+            long size = assets.GetValueOrDefault(InstallerName(tag));
+            bool canInstall = repo.Equals(OfficialRepo, StringComparison.OrdinalIgnoreCase) && !prerelease &&
+                size is > 0 and <= MaxInstallerBytes && assets.ContainsKey(MetadataAsset) && assets.ContainsKey(SignatureAsset);
+            var published = release.GetProperty("published_at");
+            return new UpdateInfo(tag, $"https://github.com/{repo}/releases/tag/{tag}",
+                release.GetProperty("body").GetString() ?? "",
+                published.ValueKind == JsonValueKind.String ? published.GetDateTime() : DateTime.MinValue, size, canInstall);
         }
+        return null;
+    }
 
-        public string Repository { get; set; } = Branding.RepositoryUrl;
+    [GeneratedRegex(@"\Av(?<num>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?<pre>-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\z",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex TagPattern();
 
-        public event Action<(long downloaded, long total)>? DownloadProgress;
+    static Match? ParseTag(string tag)
+    {
+        var match = TagPattern().Match(tag);
+        return match.Success && Version.TryParse(match.Groups["num"].Value, out _) ? match : null;
+    }
 
-        /// <summary>检查最新版本（stable = 正式 release；beta = 含 prerelease）。</summary>
-        public async Task<UpdateInfo?> CheckAsync(string channel = "stable", CancellationToken ct = default)
+    static int CompareTags(string a, string b)
+    {
+        var left = ParseTag(a)!;
+        var right = ParseTag(b)!;
+        int number = Version.Parse(left.Groups["num"].Value).CompareTo(Version.Parse(right.Groups["num"].Value));
+        if (number != 0) return number;
+        var x = left.Groups["pre"];
+        var y = right.Groups["pre"];
+        if (!x.Success || !y.Success) return y.Success.CompareTo(x.Success);
+
+        var xs = x.Value[1..].Split('.');
+        var ys = y.Value[1..].Split('.');
+        for (int i = 0; i < Math.Min(xs.Length, ys.Length); i++)
         {
-            var repo = Repository.Replace("https://github.com/", "").Trim('/');
-            if (string.IsNullOrEmpty(repo) || repo.Split('/').Length != 2)
-                throw new InvalidOperationException("更新源未配置有效仓库（设置中可自定义）");
+            bool xNumber = xs[i].All(char.IsAsciiDigit);
+            bool yNumber = ys[i].All(char.IsAsciiDigit);
+            if (xNumber != yNumber) return xNumber ? -1 : 1;
+            if (xNumber && xs[i].Length != ys[i].Length) return xs[i].Length.CompareTo(ys[i].Length);
+            int order = string.CompareOrdinal(xs[i], ys[i]);
+            if (order != 0) return order;
+        }
+        return xs.Length.CompareTo(ys.Length);
+    }
 
-            var url = $"https://api.github.com/repos/{repo}/releases{(channel == "beta" ? "" : "/latest")}";
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            using var resp = await Http.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode)
-                throw new HttpRequestException($"GitHub API 返回 {(int)resp.StatusCode}");
+    public static bool IsNewer(string version, string currentVersion)
+    {
+        if (!currentVersion.StartsWith('v')) currentVersion = "v" + currentVersion;
+        if (!version.StartsWith('v')) version = "v" + version;
+        return ParseTag(version) != null && ParseTag(currentVersion) != null && CompareTags(version, currentVersion) > 0;
+    }
 
-            var json = await resp.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+    public static bool VerifyFile(string path, string expectedSha256) =>
+        string.Equals(ArchiveService.Sha256(path), expectedSha256.Trim(), StringComparison.OrdinalIgnoreCase);
 
-            JsonElement rel;
-            if (channel == "beta")
+    static string InstallerName(string tag) => $"XiaFlow-{tag[1..]}-setup-x64.exe";
+
+    public static bool IsInstalled => File.Exists(Path.Combine(AppContext.BaseDirectory, "xiaflow-installed.ini"));
+    public static bool IsSupportedPlatform => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763)
+        && RuntimeInformation.ProcessArchitecture == Architecture.X64;
+
+    public async Task InstallAsync(UpdateInfo info, IProgress<(long Downloaded, long Total)>? progress,
+        CancellationToken ct, Func<bool> canExit)
+    {
+        if (!IsInstalled || !IsSupportedPlatform || !info.CanInstall ||
+            !IsNewer(info.Version, Branding.AppVersion.ToString(3)))
+            throw new InvalidOperationException("当前安装或目标版本不支持就地更新。");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromMinutes(15));
+        var (path, digest) = await DownloadVerifiedAsync(info, AppPaths.TempDir, Environment.OSVersion.Version.Build, progress, timeout.Token);
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            using var verified = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, true);
+            var installedBytes = await SHA256.HashDataAsync(verified, timeout.Token);
+            if (!installedBytes.AsSpan().SequenceEqual(digest))
+                throw new InvalidDataException("准备安装时文件校验失败。");
+            if (!canExit()) throw new InvalidOperationException("请先等待所有任务完成。");
+            var start = new ProcessStartInfo(path) { UseShellExecute = false };
+            start.ArgumentList.Add("/XIAFLOWUPDATE");
+            start.ArgumentList.Add("/NORESTART");
+            start.ArgumentList.Add("/DIR=" + Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
+            using var installer = Process.Start(start) ?? throw new InvalidOperationException("无法启动安装程序。");
+        }
+        catch
+        {
+            File.Delete(path);
+            throw;
+        }
+    }
+
+    internal async Task<(string Path, byte[] Digest)> DownloadVerifiedAsync(UpdateInfo info, string directory, int windowsBuild,
+        IProgress<(long Downloaded, long Total)>? progress, CancellationToken ct)
+    {
+        if (!info.CanInstall || ParseTag(info.Version) is not { } tag || tag.Groups["pre"].Success)
+            throw new InvalidOperationException("目标版本没有可验证的安装包。");
+        var baseUrl = $"https://github.com/{OfficialRepo}/releases/download/{info.Version}/";
+        var metadata = await ReadSmallAssetAsync(baseUrl + MetadataAsset, 8192, ct);
+        var signature = await ReadSmallAssetAsync(baseUrl + SignatureAsset, 1024, ct);
+        using var rsa = RSA.Create();
+        rsa.ImportSubjectPublicKeyInfo(_publicKey.Value, out _);
+        if (!rsa.VerifyData(metadata, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pss))
+            throw new InvalidDataException("更新签名校验失败。");
+
+        using var json = JsonDocument.Parse(metadata);
+        var fields = json.RootElement;
+        var filename = InstallerName(info.Version);
+        var size = fields.GetProperty("bytes").GetInt64();
+        var digest = fields.GetProperty("sha256").GetString() ?? "";
+        if (fields.GetProperty("schema").GetInt32() != 1 ||
+            fields.GetProperty("platform").GetString() != "windows" ||
+            fields.GetProperty("architecture").GetString() != "x64" ||
+            fields.GetProperty("version").GetString() != info.Version[1..] ||
+            fields.GetProperty("asset").GetString() != filename ||
+            fields.GetProperty("minimumWindowsBuild").GetInt32() > windowsBuild ||
+            size is <= 0 or > MaxInstallerBytes || size != info.DownloadSize ||
+            digest.Length != 64 || !digest.All(char.IsAsciiHexDigit))
+            throw new InvalidDataException("签名元数据与发布资产或本机不匹配。");
+
+        var expectedHash = Convert.FromHexString(digest);
+        Directory.CreateDirectory(directory);
+        var partial = Path.Combine(directory, $"update-{Guid.NewGuid():N}.part");
+        try
+        {
+            using var response = await GetAssetAsync(baseUrl + filename, ct);
+            if (response.Content.Headers.ContentLength is long length && length != size)
+                throw new InvalidDataException("安装包长度与签名元数据不符。");
+            await using var input = await response.Content.ReadAsStreamAsync(ct);
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            await using (var output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
             {
-                var releases = root.EnumerateArray()
-                    .Where(r => r.GetProperty("draft").GetBoolean() == false)
-                    .ToList();
-                rel = releases.FirstOrDefault();
-                if (rel.ValueKind == JsonValueKind.Undefined) return null;
-            }
-            else
-            {
-                rel = root;
-            }
-
-            var info = new UpdateInfo
-            {
-                Version = rel.GetProperty("tag_name").GetString() ?? "",
-                ReleaseUrl = rel.GetProperty("html_url").GetString() ?? "",
-                Notes = rel.GetProperty("body").GetString() ?? "",
-                PublishedAt = rel.TryGetProperty("published_at", out var pub) ? pub.GetDateTime() : DateTime.MinValue,
-                Prerelease = rel.GetProperty("prerelease").GetBoolean(),
-            };
-
-            // 找 Windows x64 安装包资产
-            if (rel.TryGetProperty("assets", out var assets))
-            {
-                var asset = assets.EnumerateArray().FirstOrDefault(a =>
+                long total = 0;
+                var buffer = new byte[65536];
+                int read;
+                while ((read = await input.ReadAsync(buffer, ct)) != 0)
                 {
-                    var name = a.GetProperty("name").GetString() ?? "";
-                    return name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                           name.Contains("setup", StringComparison.OrdinalIgnoreCase) &&
-                           (name.Contains("x64", StringComparison.OrdinalIgnoreCase) || name.Contains("win", StringComparison.OrdinalIgnoreCase));
-                });
-                if (asset.ValueKind == JsonValueKind.Undefined)
-                {
-                    asset = assets.EnumerateArray().FirstOrDefault(a =>
-                        ((a.GetProperty("name").GetString() ?? "").EndsWith(".zip", StringComparison.OrdinalIgnoreCase)));
+                    total += read;
+                    if (total > size) throw new InvalidDataException("安装包长度超出签名元数据。");
+                    hash.AppendData(buffer, 0, read);
+                    await output.WriteAsync(buffer.AsMemory(0, read), ct);
+                    progress?.Report((total, size));
                 }
-                if (asset.ValueKind != JsonValueKind.Undefined)
-                {
-                    info.DownloadUrl = asset.GetProperty("browser_download_url").GetString();
-                    info.DownloadSize = asset.GetProperty("size").GetInt64();
-                }
+                if (total != size || !hash.GetHashAndReset().AsSpan().SequenceEqual(expectedHash))
+                    throw new InvalidDataException("安装包长度或 SHA-256 校验失败。");
             }
-
-            // 从 Release Body 提取 SHA-256（sha256:... 或 SHA-256:...）
-            info.Sha256 = ExtractSha256(info.Notes);
-            return info;
+            var installer = Path.ChangeExtension(partial, ".exe");
+            File.Move(partial, installer);
+            return (installer, expectedHash);
         }
-
-        static string? ExtractSha256(string notes)
+        finally
         {
-            if (string.IsNullOrEmpty(notes)) return null;
-            foreach (var line in notes.Split('\n'))
-            {
-                var idx = line.IndexOf("sha256", StringComparison.OrdinalIgnoreCase);
-                if (idx < 0) continue;
-                var after = line[(idx + 6)..].TrimStart(':', ' ');
-                var hex = new string(after.TakeWhile(c => char.IsAsciiHexDigit(c)).ToArray());
-                if (hex.Length == 64) return hex.ToLowerInvariant();
-            }
-            return null;
+            File.Delete(partial);
         }
+    }
 
-        public static bool IsNewer(string newVersion, string currentVersion)
-        {
-            static Version Parse(string s)
-            {
-                s = s.TrimStart('v', 'V', ' ');
-                var dash = s.IndexOf('-');
-                if (dash > 0) s = s[..dash];
-                return Version.TryParse(s, out var v) ? v : new Version(0, 0, 0);
-            }
-            return Parse(newVersion) > Parse(currentVersion);
-        }
+    async Task<byte[]> ReadSmallAssetAsync(string url, int limit, CancellationToken ct)
+    {
+        using var response = await GetAssetAsync(url, ct);
+        await using var source = await response.Content.ReadAsStreamAsync(ct);
+        var buffer = new byte[limit + 1];
+        int count = await source.ReadAtLeastAsync(buffer, buffer.Length, false, ct);
+        if (count == 0 || count > limit) throw new InvalidDataException("更新元数据长度无效。");
+        return buffer[..count];
+    }
 
-        /// <summary>下载更新包（支持断点续传），返回本地文件路径。</summary>
-        public async Task<string> DownloadAsync(UpdateInfo info, IProgress<double>? progress = null, CancellationToken ct = default)
-        {
-            if (string.IsNullOrEmpty(info.DownloadUrl))
-                throw new InvalidOperationException("该版本未提供下载资产");
-
-            Directory.CreateDirectory(AppPaths.TempDir);
-            var fileName = Path.GetFileName(new Uri(info.DownloadUrl).LocalPath);
-            var dest = Path.Combine(AppPaths.TempDir, "update-" + fileName);
-            var partial = dest + ".part";
-
-            long existing = File.Exists(partial) ? new FileInfo(partial).Length : 0;
-            using var req = new HttpRequestMessage(HttpMethod.Get, info.DownloadUrl);
-            if (existing > 0) req.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existing, null);
-
-            using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-            resp.EnsureSuccessStatusCode();
-            long total = existing + (resp.Content.Headers.ContentLength ?? info.DownloadSize);
-
-            await using (var src = await resp.Content.ReadAsStreamAsync(ct))
-            await using (var dst = new FileStream(partial, existing > 0 && resp.StatusCode == System.Net.HttpStatusCode.PartialContent
-                ? FileMode.Append : FileMode.Create, FileAccess.Write))
-            {
-                var buf = new byte[1 << 18];
-                long done = existing;
-                int n;
-                while ((n = await src.ReadAsync(buf, ct)) > 0)
-                {
-                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
-                    done += n;
-                    progress?.Report(total > 0 ? done * 100.0 / total : 0);
-                    DownloadProgress?.Invoke((done, total));
-                }
-            }
-            File.Move(partial, dest, overwrite: true);
-            return dest;
-        }
-
-        /// <summary>校验 SHA-256。失败返回 false —— 调用方绝不能执行该文件。</summary>
-        public static bool VerifyFile(string path, string expectedSha256)
-        {
-            using var fs = File.OpenRead(path);
-            using var sha = SHA256.Create();
-            var hash = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
-            return string.Equals(hash, expectedSha256.ToLowerInvariant().Trim(), StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>执行安装（必须已通过 VerifyFile）。返回 true 表示已启动安装进程。</summary>
-        public bool Install(string updateFilePath, bool silent = true)
-        {
-            if (!File.Exists(updateFilePath)) return false;
-            var psi = new ProcessStartInfo(updateFilePath) { UseShellExecute = true };
-            if (silent && updateFilePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                psi.Arguments = "/SILENT";
-            Process.Start(psi);
-            Logger.Info($"更新安装已启动: {updateFilePath}");
-            return true;
-        }
+    async Task<HttpResponseMessage> GetAssetAsync(string url, CancellationToken ct)
+    {
+        var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        var final = response.RequestMessage?.RequestUri;
+        if (response.StatusCode == System.Net.HttpStatusCode.OK && final is { Scheme: "https", IsDefaultPort: true } &&
+            final.Host is "github.com" or "release-assets.githubusercontent.com" or "objects.githubusercontent.com")
+            return response;
+        response.Dispose();
+        throw new HttpRequestException("无法从 GitHub 官方资产服务获取更新。");
     }
 }

@@ -32,7 +32,7 @@ namespace XiaFlow.Core.Engines
         public SevenZipEngine(string? enginePath = null)
         {
             EnginePath = enginePath ?? LocateEngine()
-                ?? throw new FileNotFoundException("未找到 7z.exe 引擎（resources/engine/x64）");
+                ?? throw new FileNotFoundException("未找到 7-Zip 引擎。请设置 XIAFLOW_ENGINE_DIR 指向引擎所在目录。");
         }
 
         /// <summary>引擎定位：环境变量 → 程序目录/engine/x64 → 程序集目录/engine/x64。</summary>
@@ -40,6 +40,9 @@ namespace XiaFlow.Core.Engines
         {
             var candidates = new List<string>();
             var env = Environment.GetEnvironmentVariable("XIAFLOW_ENGINE_DIR");
+            if (!OperatingSystem.IsWindows())
+                return !string.IsNullOrWhiteSpace(env) && Path.IsPathFullyQualified(env) &&
+                    File.Exists(Path.Combine(env, "7zz")) ? Path.Combine(env, "7zz") : null;
             if (!string.IsNullOrEmpty(env)) candidates.Add(Path.Combine(env, "7z.exe"));
             candidates.Add(Path.Combine(AppContext.BaseDirectory, "engine", "x64", "7z.exe"));
             try
@@ -67,6 +70,7 @@ namespace XiaFlow.Core.Engines
 
         public void Pause()
         {
+            if (!OperatingSystem.IsWindows()) return;
             lock (_lock)
             {
                 if (_paused || _proc == null || _proc.HasExited) return;
@@ -80,6 +84,7 @@ namespace XiaFlow.Core.Engines
 
         public void Resume()
         {
+            if (!OperatingSystem.IsWindows()) return;
             lock (_lock)
             {
                 if (!_paused || _proc == null || _proc.HasExited) { _paused = false; return; }
@@ -155,6 +160,7 @@ namespace XiaFlow.Core.Engines
             public List<string>? SelectedEntries { get; set; }   // null = 全部
             public ConflictPolicy Conflict { get; set; } = ConflictPolicy.Overwrite;
             public bool RecreateRootFolder { get; set; }         // 需要时由调用方建目录
+            public bool FailOnWarning { get; set; }
         }
 
         public ArchiveListing Extract(ExtractRequest req, CancellationToken ct = default)
@@ -183,7 +189,7 @@ namespace XiaFlow.Core.Engines
             {
                 var (code, stdout, stderr) = RunWithProgress(args, ct);
                 var combined = stdout + "\n" + stderr;
-                if (code == 0 || code == 1) // 1 = 警告（部分文件问题）
+                if (code == 0 || (code == 1 && !req.FailOnWarning))
                 {
                     if (code == 1)
                         Logger.Warn($"解压完成但存在警告: {req.ArchivePath} :: {Trim(combined)}");
@@ -213,6 +219,7 @@ namespace XiaFlow.Core.Engines
             public List<string> InputPaths { get; set; } = new();  // 文件或目录
             public List<string> ExcludePatterns { get; set; } = new(); // 如 *.tmp、node_modules
             public bool KeepPaths { get; set; } = true;            // 保留目录结构
+            public bool FailOnWarning { get; set; }
         }
 
         public void Create(CreateRequest req, CancellationToken ct = default)
@@ -271,7 +278,7 @@ namespace XiaFlow.Core.Engines
             {
                 var (code, stdout, stderr) = RunWithProgress(args, ct, workDir);
                 var combined = stdout + "\n" + stderr;
-                if (code == 0 || code == 1) return;
+                if (code == 0 || (code == 1 && !req.FailOnWarning)) return;
                 throw ClassifyError(code, combined, req.ArchivePath);
             }
             finally
@@ -309,14 +316,14 @@ namespace XiaFlow.Core.Engines
 
         // ---------- 测试完整性 ----------
 
-        public ArchiveListing Test(string archive, string? password = null, CancellationToken ct = default)
+        public ArchiveListing Test(string archive, string? password = null, CancellationToken ct = default, bool failOnWarning = false)
         {
             var args = $"t -sccUTF-8 -bsp1 -bso0 {Quote(archive)}";
             if (!string.IsNullOrEmpty(password)) args += $" -p{password}";
             else args += " -p";
             var (code, stdout, stderr) = RunWithProgress(args, ct);
             var combined = stdout + "\n" + stderr;
-            if (code == 0 || code == 1) return List(archive, password);
+            if (code == 0 || (code == 1 && !failOnWarning)) return List(archive, password);
             throw ClassifyError(code, combined, archive);
         }
 
@@ -681,7 +688,11 @@ namespace XiaFlow.Core.Engines
                     case "CRC": cur!.Crc = val; break;
                     case "Encrypted": cur!.Encrypted = val == "+"; break;
                     case "Folder": cur!.IsDirectory = val == "+"; break;
-                    case "SymLink": cur!.IsSymlink = true; break;
+                    case "SymLink":
+                    case "Symbolic Link":
+                    case "Hard Link":
+                        if (cur != null && val.Length > 0 && val != "-") cur.IsSymlink = true;
+                        break;
                     case "Type": listing.FormatName = val; break;
                 }
             }
@@ -692,9 +703,12 @@ namespace XiaFlow.Core.Engines
         static void Commit(ArchiveEntry e, ArchiveListing l)
         {
             // 目录判定补充：posix 属性首段含 d
-            if (!e.IsDirectory && e.Attributes.StartsWith('d')) e.IsDirectory = true;
-            // unix 符号链接属性 l（如 lrwxrwxrwx）
-            if (!e.IsSymlink && e.Attributes.Contains("lrwxrwxrwx")) e.IsSymlink = true;
+            foreach (var attribute in e.Attributes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (attribute.Length != 10) continue;
+                if (attribute[0] == 'd') e.IsDirectory = true;
+                if (attribute[0] is 'l' or 'b' or 'c' or 'p' or 's') e.IsSymlink = true;
+            }
             if (!e.IsDirectory)
             {
                 l.FileCount++;

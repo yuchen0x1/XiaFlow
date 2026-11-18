@@ -1,6 +1,6 @@
 # 第三方组件声明（THIRD-PARTY NOTICES）
 
-匣流 XiaFlow 1.0.0 随程序分发的第三方组件及其许可证：
+匣流 XiaFlow 使用的第三方组件及其许可证：
 
 ## 1. 7-Zip 26.06（7z.exe、7z.dll）
 
@@ -9,13 +9,13 @@
 - 分发形式：官方安装包中提取的未修改二进制（`engine/x64/7z.exe`、`engine/x64/7z.dll`）
 - 许可全文：[`resources/licenses/7-Zip-License.txt`](resources/licenses/7-Zip-License.txt)（随程序分发于 `licenses/7-Zip-License.txt`）
 - unRAR 限制摘要：unRAR 源码受 unRAR 授权约束，不得用于重建 RAR 压缩算法。**匣流因此不提供 RAR 创建功能，仅提供 RAR 解压。**
-- 源码：https://www.7-zip.org / https://github.com/ip7z/7zip
+- 26.06 对应源码随 Releases 提供 `7z2606-src.tar.xz`，也可从 [上游 26.06 Release](https://github.com/ip7z/7zip/releases/tag/26.06) 获取。
 
 ## 2. SharpCompress 0.50.9
 
 - 版权所有 (c) 2012 Adam Hathcock 与贡献者
 - 许可证：**MIT**
-- 用途：归档格式识别参考与扩展读取能力
+- 用途：测试夹具生成。常规安装包和 CLI 分发包不包含该依赖。
 - https://github.com/adamhathcock/sharpcompress
 
 ## 3. K4os.Compression.LZ4.Streams 1.3.5（含 K4os.Compression.LZ4、K4os.Hash.xxHash）

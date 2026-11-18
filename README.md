@@ -6,7 +6,7 @@
 
 现代化的 Windows 专业压缩、解压、文件管理、批量处理与自动备份软件
 
-`v1.0.0` · Windows 10/11 x64 · [.NET 10 WPF](https://dotnet.microsoft.com) · [7-Zip 26.06 引擎](https://www.7-zip.org)
+`v1.1.0` · Windows 桌面 · Windows / Linux / macOS CLI · [7-Zip 26.06 引擎](https://github.com/ip7z/7zip/releases/tag/26.06)
 
 </div>
 
@@ -18,9 +18,9 @@
 
 ## 最新更新
 
-### v1.0.0 · 2026-11-18
+### v1.1.0 · 2026-11-18
 
-匣流首个正式版，提供压缩与解压、批量处理、压缩包管理、自动备份与恢复、统一任务中心和 Windows 系统集成。
+新增可在 Windows、Linux 和 macOS 运行的命令行工具。Windows 安装版更新前验证发布签名与对应安装包，支持取消下载和跳过版本。归档浏览恢复了单文件预览与提取。
 
 完整发布记录见[更新说明](docs/releases/release-notes.md)，安装包与便携版见 [GitHub Releases](https://github.com/yuchen0x1/XiaFlow/releases)。
 
@@ -47,7 +47,7 @@
 - **快速压缩 / 快速解压**：拖放式操作，6 档压缩等级、AES-256 加密、加密文件名（7Z）、分卷、字典大小、线程数、排除规则、压缩后完整性测试
 - **统一任务中心**：压缩 / 解压 / 批量 / 校验 / 备份 / 恢复任务统一排队，并行限制、暂停（进程级挂起）/ 恢复 / 取消 / 重试、真实进度 / 速度 / 剩余时间、历史记录
 - **Windows 集成**：右键菜单（用户级注册表，Win10/11 有效）、「打开方式」候选注册、开机启动、系统托盘、气泡通知
-- **自动更新**：GitHub Releases 更新源，SHA-256 校验通过后才执行安装，校验失败绝不运行未验证文件；支持 stable / beta 通道与跳过版本
+- **更新**：官方稳定版签名、SHA-256 与包大小全部通过校验后，Windows 安装版才启动安装程序。
 - **安全防线**：Zip Slip 路径穿越防护、绝对路径拒绝、非法字符清洗、保留名中和、符号链接跳过、压缩炸弹（总量 / 单文件 / 文件数上限）、磁盘空间预检、密码 DPAPI 加密存储（绝不明文 / 绝不入日志）
 - **双主题**：精致深色科技风 + 完整浅色主题，支持跟随系统
 
@@ -67,14 +67,34 @@
 
 ### 安装版（推荐）
 
-1. 从 [GitHub Releases](https://github.com/yuchen0x1/XiaFlow/releases) 下载 `XiaFlow-1.0.0-setup-x64.exe`
+1. 从 [GitHub Releases](https://github.com/yuchen0x1/XiaFlow/releases/latest) 下载 `XiaFlow-1.1.0-setup-x64.exe`
 2. 运行安装向导：自定义安装路径、桌面快捷方式、右键菜单与「打开方式」候选均为可选项
 3. 用户级安装（无需管理员权限）；卸载保留用户备份数据（`%APPDATA%\XiaFlow`）
 
 ### 便携版
 
-1. 从 [GitHub Releases](https://github.com/yuchen0x1/XiaFlow/releases) 下载 `XiaFlow-1.0.0-portable-x64.zip` 并解压到任意目录
+1. 从 [GitHub Releases](https://github.com/yuchen0x1/XiaFlow/releases/latest) 下载 `XiaFlow-1.1.0-portable-x64.zip` 并解压到新目录
 2. 运行 `XiaFlow.exe` 即可，无需安装；数据目录仍位于 `%APPDATA%\XiaFlow`（配置 / 备份索引 / 密码库）
+
+### 命令行版
+
+下载 `XiaFlow-1.1.0-cli.zip`，解压到新目录。安装 .NET 10 Runtime 和 [7-Zip 26.06](https://github.com/ip7z/7zip/releases/tag/26.06)，将 `XIAFLOW_ENGINE_DIR` 指向放置 `7z.exe`（Windows）或 `7zz`（Linux/macOS）的绝对目录。
+
+```sh
+dotnet xiaflow-cli.dll --help
+dotnet xiaflow-cli.dll create sample.zip ./files
+dotnet xiaflow-cli.dll list sample.zip --json
+dotnet xiaflow-cli.dll test sample.zip
+dotnet xiaflow-cli.dll extract sample.zip ./new-output
+```
+
+| 能力 | Windows 桌面 | Windows / Linux / macOS CLI |
+| --- | --- | --- |
+| 压缩、归档浏览、完整性校验 | 多格式，支持加密和分卷 | ZIP / 7z 创建与解压，条目清单可输出 JSON |
+| 批量解压、备份与恢复、托盘、Shell 集成 | 支持 | 由脚本单独调用归档命令 |
+| 更新 | 安装版可安装官方签名更新。便携版下载新版 ZIP | 从 Releases 下载并解包新版 ZIP |
+
+Windows 桌面提供 x64 资产，最低内部版本 17763。系统生命周期与本次验收范围见 [交付报告](docs/delivery.md)。
 
 ## 使用教程
 
@@ -88,24 +108,25 @@
 
 ## 自动更新说明
 
-- 默认每 24 小时后台检查（可在设置中关闭 / 调整），更新源默认为本仓库 GitHub Releases
-- 安装包资产的 SHA-256 摘要发布于 Release Notes（`sha256:<hex>`），客户端下载后强制校验，校验失败即删除且**绝不执行**
-- 支持 stable / beta 通道切换、跳过指定版本；下载支持断点续传
+- 从 v1.0.0 升级时，请到官方 Releases 手动运行 v1.1.0 安装程序一次。
+- 默认每 24 小时检查，可在设置调整。安装版从官方仓库下载签名元数据，校验版本、架构、系统、大小和 SHA-256 后启动安装向导。更新前请等待归档及备份任务完成。
+- 便携版和 CLI 请核对 `SHA256SUMS.txt` 后解包到新目录。更新与故障恢复步骤见 [维护指南](docs/maintenance.md)。
 
 ## 技术架构
 
 ```
-XiaFlow.sln
+XiaFlow.slnx
 ├─ src/XiaFlow.Core        核心库（无 UI 依赖）
 │  ├─ Engines              7-Zip 26.06 进程封装（进度解析/进程挂起暂停/取消）+ LZ4 流式引擎
 │  ├─ Security             PathGuard（ZipSlip/炸弹/符号链接/磁盘空间）+ 提取安全限制
 │  ├─ Tasks                统一任务调度（队列/并行/暂停恢复/取消/重试/历史）
 │  ├─ Batch                批量分析器 + 分类 + 批量执行器 + 报告
 │  ├─ Backup               备份执行器（完整/增量/差异）+ 清单与备份链 + 保留策略 + 调度器 + 恢复服务
-│  ├─ Update               GitHub Releases 更新（SHA-256 强制校验 / 断点续传）
+│  ├─ Update               Windows 安装版的签名更新与 SHA-256 校验
 │  └─ Integration          右键菜单 / 文件关联 / 开机启动 / 单实例 IPC
 ├─ src/XiaFlow.App         WPF 前端（net10.0-windows，手写主题系统，11 个页面）
-├─ tests/XiaFlow.Tests     98 个真实自动化测试（引擎端到端 / 安全攻击 / 批量 / 备份链 / 恢复 / 集成）
+├─ src/XiaFlow.Cli         跨平台命令行入口（net10.0）
+├─ tests/XiaFlow.Tests     归档引擎、路径安全、备份、恢复和签名更新检查
 ├─ installer/XiaFlow.iss   Inno Setup 安装包脚本（中文向导 / 用户级 / 可选集成）
 └─ resources/engine        7-Zip 26.06 官方二进制 + 许可证（LGPL + unRAR 限制）
 ```
@@ -121,8 +142,8 @@ XiaFlow.sln
 ## 构建方法
 
 ```bash
-# 构建并运行全部 98 个自动化测试
-dotnet test tests/XiaFlow.Tests/XiaFlow.Tests.csproj -c Release
+# 构建并运行全部自动化测试
+pwsh -File scripts/validate.ps1
 
 # 构建 Debug 版运行
 dotnet build src/XiaFlow.App/XiaFlow.App.csproj -c Release
@@ -131,8 +152,8 @@ src/XiaFlow.App/bin/Release/net10.0-windows/XiaFlow.exe
 # 构建便携版（自包含，输出 artifacts/portable/XiaFlow）
 dotnet publish src/XiaFlow.App/XiaFlow.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/portable/XiaFlow
 
-# 构建安装包（需先完成便携版构建）
-iscc installer/XiaFlow.iss    # 输出 artifacts/installer/XiaFlow-1.0.0-setup-x64.exe
+# 在干净的输出目录构建安装包、便携包和 CLI 包
+pwsh -File scripts/package.ps1 -Installer
 ```
 
 ## 常见问题
@@ -158,10 +179,14 @@ A: 便携版为自包含单目录程序且未做代码签名，可能被部分�
 ## 许可证
 
 - 匣流 XiaFlow 源码：[MIT License](LICENSE)
-- 随附第三方组件：7-Zip（LGPL-2.1 + unRAR 限制）、SharpCompress（MIT）、K4os.LZ4（MIT）、.NET（MIT）、Inno Setup 简体中文翻译（MIT）
+- 随附第三方组件：7-Zip（LGPL-2.1 + unRAR 限制）、K4os.LZ4（MIT）、.NET（MIT）、Inno Setup 简体中文翻译（MIT）
   —— 完整文本见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 与随程序分发的 `licenses/` 目录
 
 匣流不复制任何参考产品（7-Zip / Bandizip / 360压缩 等）的品牌、图标或受版权保护的代码。
+
+## 参与开发
+
+功能路线与平台评估见 [交付报告](docs/delivery.md) 和 [竞品与技术调研](docs/research.md)。欢迎通过 [Issues](https://github.com/yuchen0x1/XiaFlow/issues) 提交反馈，参与开发请阅读 [贡献指南](CONTRIBUTING.md)。
 
 ---
 

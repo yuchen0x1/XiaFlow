@@ -1,0 +1,23 @@
+name: 问题报告
+description: 报告使用、兼容性或更新失败问题
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题类型
+      options: [软件功能, 系统兼容性, 安装或更新]
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 匣流版本、安装版或便携版、操作系统版本和 CPU
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤、预期结果和实际结果
+      description: 可附已脱敏的错误信息。请移除密钥、密码、文件路径及隐私数据。
+    validations:
+      required: true

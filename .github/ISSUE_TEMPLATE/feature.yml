@@ -1,0 +1,15 @@
+name: 功能建议
+description: 提议新的归档、备份或平台功能
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: 使用场景和当前障碍
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 预期体验与涉及的平台
+    validations:
+      required: true

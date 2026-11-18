@@ -344,6 +344,8 @@ namespace XiaFlow.App
         // ---------- 更新检查 ----------
 
         System.Windows.Threading.DispatcherTimer? _updateTimer;
+        string? _notifiedUpdate;
+        bool _checkingUpdate;
 
         void StartUpdateTimer()
         {
@@ -359,12 +361,15 @@ namespace XiaFlow.App
 
         async void CheckUpdateQuiet()
         {
+            if (_checkingUpdate || !AppServices.Settings.AutoCheckUpdate) return;
+            _checkingUpdate = true;
             try
             {
                 var info = await AppServices.Updater.CheckAsync(AppServices.Settings.UpdateChannel);
                 if (info != null && UpdateService.IsNewer(info.Version, Branding.AppVersion.ToString(3)) &&
-                    info.Version != AppServices.Settings.SkippedVersion)
+                    info.Version != AppServices.Settings.SkippedVersion && info.Version != _notifiedUpdate)
                 {
+                    _notifiedUpdate = info.Version;
                     AppServices.Notifications.Push("发现新版本",
                         $"匣流 {info.Version} 已发布，当前 {Branding.VersionText}。可在“关于”页面查看并更新。", "info");
                     _main?.NotifyUpdateAvailable(info);
@@ -373,6 +378,10 @@ namespace XiaFlow.App
             catch (Exception ex)
             {
                 Logger.Debug("更新检查失败: " + ex.Message);
+            }
+            finally
+            {
+                _checkingUpdate = false;
             }
         }
 

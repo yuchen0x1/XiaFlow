@@ -55,7 +55,6 @@ namespace XiaFlow.App.Pages
             Select(UpdateIntervalBox, s.UpdateCheckIntervalHours.ToString());
             Select(ChannelBox, s.UpdateChannel);
             UpdateSourceBox.Text = s.UpdateSource;
-            AutoDownloadUpdate.IsChecked = s.AutoDownloadUpdate;
 
             VaultList.ItemsSource = _vaultRows;
             _vaultRows.Clear();
@@ -100,7 +99,6 @@ namespace XiaFlow.App.Pages
             s.UpdateCheckIntervalHours = int.Parse((string)((ComboBoxItem)UpdateIntervalBox.SelectedItem).Tag);
             s.UpdateChannel = (string)((ComboBoxItem)ChannelBox.SelectedItem).Tag;
             s.UpdateSource = UpdateSourceBox.Text.Trim();
-            s.AutoDownloadUpdate = AutoDownloadUpdate.IsChecked == true;
 
             AppServices.ApplyGeneralSettings();
         }
